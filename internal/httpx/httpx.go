@@ -167,3 +167,17 @@ func Recover(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// ErrorBytes builds a standard-format error body without writing it. The pay
+// flow needs the bytes so the exact response can be stored for idempotent replay.
+func ErrorBytes(code, message string, details map[string]any) []byte {
+	b, _ := json.Marshal(errorBody{Error: errorDetail{Code: code, Message: message, Details: details}})
+	return b
+}
+
+// WriteRaw writes an already-serialized JSON body.
+func WriteRaw(w http.ResponseWriter, status int, body []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
