@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS webhook_deliveries;
+DROP TABLE IF EXISTS webhook_events;
+DROP TABLE IF EXISTS webhook_endpoints;
+DROP TABLE IF EXISTS idempotency_keys;
+DROP TABLE IF EXISTS payment_attempts;
+DROP TABLE IF EXISTS invoice_line_items;
+DROP TABLE IF EXISTS invoices;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS businesses;
