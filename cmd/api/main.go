@@ -12,8 +12,10 @@ import (
 
 	"invoice-service/internal/auth"
 	"invoice-service/internal/config"
+	"invoice-service/internal/customers"
 	"invoice-service/internal/db"
 	"invoice-service/internal/httpx"
+	"invoice-service/internal/invoices"
 )
 
 func main() {
@@ -47,12 +49,22 @@ func main() {
 		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// Every /v1 route goes through API key auth.
 	authed := auth.Middleware(gdb)
+	route := func(pattern string, h http.HandlerFunc) {
+		mux.Handle(pattern, authed(h))
+	}
 
-	// Temporary smoke test for auth. Real routes replace it in the next steps.
-	mux.Handle("GET /v1/me", authed(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"business_id": auth.BusinessID(r.Context())})
-	})))
+	cust := &customers.Handler{DB: gdb}
+	route("POST /v1/customers", cust.Create)
+	route("GET /v1/customers/{id}", cust.Get)
+	route("GET /v1/customers", cust.List)
+
+	inv := &invoices.Handler{DB: gdb}
+	route("POST /v1/invoices", inv.Create)
+	route("GET /v1/invoices/{id}", inv.Get)
+	route("GET /v1/invoices", inv.List)
+	route("POST /v1/invoices/{id}/void", inv.Void)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, "not_found", "Route not found", nil)
