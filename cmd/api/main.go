@@ -16,6 +16,8 @@ import (
 	"invoice-service/internal/db"
 	"invoice-service/internal/httpx"
 	"invoice-service/internal/invoices"
+	"invoice-service/internal/payments"
+	"invoice-service/internal/psp"
 )
 
 func main() {
@@ -36,6 +38,9 @@ func main() {
 	if err != nil {
 		fatal("db handle", err)
 	}
+
+	// Hard 5s limit on every PSP call: a 30s PSP hang can never pin our connections.
+	pspClient := psp.New(cfg.PSPURL, 5*time.Second)
 
 	mux := http.NewServeMux()
 
@@ -66,6 +71,9 @@ func main() {
 	route("GET /v1/invoices", inv.List)
 	route("POST /v1/invoices/{id}/void", inv.Void)
 
+	pay := &payments.Handler{DB: gdb, PSP: pspClient}
+	route("POST /v1/invoices/{id}/pay", pay.Pay)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, "not_found", "Route not found", nil)
 	})
@@ -83,7 +91,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		slog.Info("api listening", "addr", cfg.Addr)
+		slog.Info("api listening", "addr", cfg.Addr, "psp", cfg.PSPURL)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fatal("server", err)
 		}

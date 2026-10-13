@@ -64,6 +64,8 @@ type createRequest struct {
 
 func lineItemsInOrder(db *gorm.DB) *gorm.DB { return db.Order("id") }
 
+func attemptsInOrder(db *gorm.DB) *gorm.DB { return db.Order("id") }
+
 // validateCreate returns the server-computed total and any validation problems.
 func validateCreate(req *createRequest) (int64, map[string]any) {
 	problems := map[string]any{}
@@ -138,6 +140,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	inv.PaymentAttempts = []models.PaymentAttempt{} // new invoice: serialize as [] not null
+
 	err := h.DB.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
 		// The customer must belong to the same business.
 		var c models.Customer
@@ -161,10 +165,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) load(ctx context.Context, id, businessID uuid.UUID) (models.Invoice, error) {
 	var inv models.Invoice
+	// err := h.DB.WithContext(ctx).
+	// 	Preload("LineItems", lineItemsInOrder).
+	// 	Where("id = ? AND business_id = ?", id, businessID).
+	// 	Take(&inv).Error
+
+	// if err != nil {
+	// 	return inv, err
+	// }
+
 	err := h.DB.WithContext(ctx).
 		Preload("LineItems", lineItemsInOrder).
+		Preload("PaymentAttempts", attemptsInOrder).
 		Where("id = ? AND business_id = ?", id, businessID).
 		Take(&inv).Error
+
 	return inv, err
 }
 
@@ -210,6 +225,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	invoices := make([]models.Invoice, 0, page.Limit+1)
 	err := q.Preload("LineItems", lineItemsInOrder).
+		Preload("PaymentAttempts", attemptsInOrder).
 		Order("id DESC").
 		Limit(page.Limit + 1). // one extra row tells us if another page exists
 		Find(&invoices).Error
