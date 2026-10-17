@@ -111,3 +111,38 @@ type IdempotencyKey struct {
 }
 
 func (IdempotencyKey) TableName() string { return "idempotency_keys" }
+
+type WebhookEndpoint struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	BusinessID uuid.UUID `gorm:"type:uuid" json:"-"`
+	URL        string    `gorm:"column:url" json:"url"`
+	Secret     string    `json:"-"` // never returned after creation
+	Enabled    bool      `json:"enabled"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// WebhookEvent is the outbox row: written in the same transaction as the state
+// change it describes, immutable afterwards. Payload is the exact JSON body
+// that gets delivered (a snapshot of the invoice at event time).
+type WebhookEvent struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
+	BusinessID uuid.UUID `gorm:"type:uuid"`
+	InvoiceID  uuid.UUID `gorm:"type:uuid"`
+	Type       string
+	Payload    string `gorm:"type:jsonb"`
+	CreatedAt  time.Time
+}
+
+// WebhookDelivery is the per-endpoint retry state for one event.
+type WebhookDelivery struct {
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey"`
+	EventID        uuid.UUID `gorm:"type:uuid"`
+	EndpointID     uuid.UUID `gorm:"type:uuid"`
+	Status         string
+	AttemptCount   int
+	NextAttemptAt  *time.Time
+	LastStatusCode *int
+	LastError      *string
+	DeliveredAt    *time.Time
+	CreatedAt      time.Time
+}

@@ -15,6 +15,7 @@ import (
 	"invoice-service/internal/auth"
 	"invoice-service/internal/httpx"
 	"invoice-service/internal/models"
+	"invoice-service/internal/webhooks"
 )
 
 // Limits keep money math safe from int64 overflow:
@@ -150,7 +151,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			Take(&c).Error; err != nil {
 			return err
 		}
-		return tx.Create(&inv).Error // invoice + line items in one transaction
+
+		if err := tx.Create(&inv).Error; err != nil { // invoice + line items
+			return err
+		}
+		// Same transaction as the invoice: the event exists if and only if the invoice does.
+		return webhooks.Emit(tx, bid, webhooks.EventCreated, inv)
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		httpx.Unprocessable(w, "Validation failed", map[string]any{"customer_id": "customer not found"})

@@ -18,6 +18,7 @@ import (
 	"invoice-service/internal/invoices"
 	"invoice-service/internal/payments"
 	"invoice-service/internal/psp"
+	"invoice-service/internal/webhooks"
 )
 
 func main() {
@@ -73,6 +74,10 @@ func main() {
 
 	pay := &payments.Handler{DB: gdb, PSP: pspClient}
 	route("POST /v1/invoices/{id}/pay", pay.Pay)
+
+	wh := &webhooks.Handler{DB: gdb}
+	route("POST /v1/webhook-endpoints", wh.CreateEndpoint)
+	route("GET /v1/events", wh.ListEvents)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, "not_found", "Route not found", nil)

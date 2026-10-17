@@ -31,6 +31,7 @@ import (
 	"invoice-service/internal/invoices"
 	"invoice-service/internal/models"
 	"invoice-service/internal/psp"
+	"invoice-service/internal/webhooks"
 )
 
 const (
@@ -311,6 +312,9 @@ func (h *Handler) finalize(ctx context.Context, bid uuid.UUID, key string, att m
 			if err != nil {
 				return err
 			}
+			if err := webhooks.Emit(tx, bid, webhooks.EventPaid, inv); err != nil {
+				return err
+			}
 			out, err = jsonResult(http.StatusOK, inv)
 			if err != nil {
 				return err
@@ -318,6 +322,13 @@ func (h *Handler) finalize(ctx context.Context, bid uuid.UUID, key string, att m
 
 		case psp.Failed:
 			// NEXT STEP: insert the invoice.payment_failed webhook event here.
+			inv, err := loadInvoice(tx, att.InvoiceID, bid)
+			if err != nil {
+				return err
+			}
+			if err := webhooks.Emit(tx, bid, webhooks.EventPaymentFailed, inv); err != nil {
+				return err
+			}
 			out = failedResult(att, res.Code)
 
 		default:
