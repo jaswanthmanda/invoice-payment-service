@@ -1,6 +1,6 @@
-// Worker runs the background jobs: today the webhook dispatcher, and the
-// payment reconciler in the next step. It is a separate process from the API,
-// so a slow customer endpoint can never affect API latency.
+// Worker runs the background jobs: the webhook dispatcher and the payment
+// reconciler. It is a separate process from the API, so a slow customer
+// endpoint or a slow PSP can never affect API latency.
 package main
 
 import (
@@ -9,9 +9,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"invoice-service/internal/config"
 	"invoice-service/internal/db"
+	"invoice-service/internal/payments"
+	"invoice-service/internal/psp"
 	"invoice-service/internal/webhooks"
 )
 
@@ -34,7 +37,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// NEXT STEP: the payment reconciler starts here as a second goroutine.
+	rec := &payments.Reconciler{DB: gdb, PSP: psp.New(cfg.PSPURL, 5*time.Second)}
+	go rec.Run(ctx)
+
 	webhooks.NewDispatcher(gdb).Run(ctx) // blocks until shutdown
 }
 

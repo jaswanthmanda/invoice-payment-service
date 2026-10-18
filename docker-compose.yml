@@ -1,19 +1,84 @@
 services:
   db:
     image: postgres:16
-    container_name: invoices-pg
     environment:
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: invoices
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d invoices"]
       interval: 3s
       timeout: 3s
-      retries: 10
+      retries: 15
+
+  psp:
+    build: .
+    command: ["/app/psp"]
+    environment:
+      PSP_ADDR: ":9090"
+    ports:
+      - "${PSP_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: .
+    command: ["/app/api"]
+    environment: &app-env
+      DATABASE_URL: postgres://postgres:pass@db:5432/invoices?sslmode=disable
+      PSP_URL: http://psp:9090
+      API_ADDR: ":8080"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      psp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  worker:
+    build: .
+    command: ["/app/worker"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+      psp:
+        condition: service_healthy
+
+  # One-shot: creates a demo business and API key on first start only.
+  # The key is printed once: docker compose logs seed
+  seed:
+    build: .
+    command: ["/app/seed", "-if-empty", "-name", "Demo Business"]
+    environment: *app-env
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Optional webhook receiver for demos: docker compose --profile demo up -d receiver
+  receiver:
+    profiles: ["demo"]
+    build: .
+    command: ["/app/webhook-receiver"]
+    environment:
+      RECEIVER_ADDR: ":9100"
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      FAIL_FIRST: ${FAIL_FIRST:-0}
+    ports:
+      - "9100:9100"
 
 volumes:
   pgdata:

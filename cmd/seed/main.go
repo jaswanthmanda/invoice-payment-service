@@ -23,6 +23,7 @@ import (
 func main() {
 	name := flag.String("name", "Demo Business", "name for a new business")
 	bizID := flag.String("business-id", "", "add a key to this existing business instead of creating one")
+	ifEmpty := flag.Bool("if-empty", false, "do nothing if any business already exists")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -40,6 +41,16 @@ func main() {
 	fullKey, prefix, hash, err := auth.GenerateKey()
 	if err != nil {
 		log.Fatal(err)
+	}
+	if *ifEmpty {
+		var n int64
+		if err := gdb.Model(&models.Business{}).Count(&n).Error; err != nil {
+			log.Fatal(err)
+		}
+		if n > 0 {
+			fmt.Println("already seeded: skipping. To add a key run: docker compose run --rm seed /app/seed -name Demo")
+			return
+		}
 	}
 
 	var businessID uuid.UUID
